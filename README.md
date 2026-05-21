@@ -1,4 +1,4 @@
-# Assessment Infrastructure and CI/CD Platform
+# Assessment Infrastructure (assessment-infra)
 
 ## Project Overview
 
@@ -27,7 +27,7 @@ The platform consists of:
 # Repository Structure
 
 ```text
-assessment-infra/
+starttech-infra/
 ├── .github/
 │   └── workflows/
 │       └── infrastructure-deploy.yml
@@ -51,6 +51,37 @@ assessment-infra/
 ├── ARCHITECTURE.md
 └── RUNBOOK.md
 ```
+
+---
+
+# Quick start
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars   # edit values
+terraform init && terraform apply
+```
+
+## GitHub secrets (this repo — infrastructure workflow)
+
+| Secret | Purpose |
+|--------|---------|
+| `AWS_ACCESS_KEY_ID` | Terraform AWS provider |
+| `AWS_SECRET_ACCESS_KEY` | Terraform AWS provider |
+| `TF_VAR_mongodb_uri` | MongoDB Atlas URI |
+| `TF_VAR_jwt_secret` | Backend JWT secret |
+
+## GitHub secrets (starttech-application repo)
+
+| Secret | Terraform output |
+|--------|------------------|
+| `ALB_DNS_NAME` | `alb_dns_name` |
+| `ECR_REPOSITORY` | `ecr_repository_url` |
+| `ASG_NAME` | `autoscaling_group_name` |
+| `S3_BUCKET` | `s3_bucket_name` |
+| `CLOUDFRONT_DISTRIBUTION_ID` | `cloudfront_distribution_id` |
+
+Allowlist `nat_gateway_public_ip` in MongoDB Atlas before backend targets go healthy.
 
 ---
 

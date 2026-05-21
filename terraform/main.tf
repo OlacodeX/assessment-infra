@@ -19,6 +19,8 @@ module "compute" {
 
   source = "./modules/compute"
 
+  project_name = var.project_name
+
   vpc_id = module.networking.vpc_id
 
   public_subnet_ids = module.networking.public_subnet_ids
@@ -44,4 +46,12 @@ module "compute" {
 
 module "monitoring" {
   source = "./modules/monitoring"
+
+  project_name         = var.project_name
+  aws_region           = var.aws_region
+  asg_name             = module.compute.autoscaling_group_name
+  alb_arn_suffix       = module.compute.alb_arn_suffix
+  redis_cluster_id     = module.storage.redis_cluster_id
+  scale_out_policy_arn = module.compute.scale_out_policy_arn
+  scale_in_policy_arn  = module.compute.scale_in_policy_arn
 }

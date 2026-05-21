@@ -1,5 +1,7 @@
 resource "aws_autoscaling_group" "backend" {
 
+  name = "${var.project_name}-backend-asg"
+
   desired_capacity = 2
 
   max_size = 4

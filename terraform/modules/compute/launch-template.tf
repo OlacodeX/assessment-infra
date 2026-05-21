@@ -34,6 +34,7 @@ resource "aws_launch_template" "backend" {
       backend_env_b64    = base64encode(local.backend_env)
       ecr_repository_url = aws_ecr_repository.backend.repository_url
       aws_region         = var.aws_region
+      project_name       = var.project_name
     })
   )
 }

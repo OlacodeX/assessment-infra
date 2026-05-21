@@ -4,25 +4,59 @@
 
 ```bash
 cd terraform
+cp terraform.tfvars.example terraform.tfvars   # edit with real values
 terraform init
 terraform apply
 ```
 
-## GitHub secrets (app repo)
+## GitHub secrets (assessment-application repo)
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for `ALB_DNS_NAME`, `ECR_REPOSITORY`, `ASG_NAME`, and Atlas NAT IP.
+After apply, set these from Terraform outputs:
 
-## After backend CI/CD pushes an image
+| Secret | Command |
+|--------|---------|
+| `ALB_DNS_NAME` | `terraform output -raw alb_dns_name` |
+| `ECR_REPOSITORY` | `terraform output -raw ecr_repository_url` |
+| `ASG_NAME` | `terraform output -raw autoscaling_group_name` |
+| `S3_BUCKET` | `terraform output -raw s3_bucket_name` |
+| `CLOUDFRONT_DISTRIBUTION_ID` | `terraform output -raw cloudfront_distribution_id` |
+
+Use hostname only for `ALB_DNS_NAME` (no `http://`).
+
+## MongoDB Atlas (required)
+
+```bash
+terraform output -raw nat_gateway_public_ip
+```
+
+Atlas → Network Access → add that IP. Without this, the backend container exits on startup and ALB targets stay unhealthy.
+
+## Instance refresh
 
 ```bash
 aws autoscaling start-instance-refresh \
-  --auto-scaling-group-name "$(terraform -chdir=terraform output -raw autoscaling_group_name)" \
+  --auto-scaling-group-name "$(terraform output -raw autoscaling_group_name)" \
   --region us-east-1
 ```
 
-Verify:
+## Verify
 
 ```bash
-curl "http://$(terraform -chdir=terraform output -raw alb_dns_name)/ping"
-curl "http://$(terraform -chdir=terraform output -raw alb_dns_name)/health"
+curl "http://$(terraform output -raw alb_dns_name)/health"
 ```
+
+## Troubleshooting
+
+```bash
+sudo cat /var/log/user-data.log
+sudo docker ps -a
+sudo docker logs backend
+```
+
+SSM is enabled on EC2 (`AmazonSSMManagedInstanceCore`).
+
+## Stuck instance refresh
+
+1. Fix Atlas allowlist.
+2. `aws autoscaling cancel-instance-refresh --auto-scaling-group-name <ASG> --region us-east-1`
+3. `terraform apply` then start a new refresh.

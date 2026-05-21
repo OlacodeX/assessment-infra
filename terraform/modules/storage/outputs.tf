@@ -2,6 +2,10 @@ output "redis_endpoint" {
   value = aws_elasticache_cluster.redis.cache_nodes[0].address
 }
 
+output "redis_cluster_id" {
+  value = aws_elasticache_cluster.redis.cluster_id
+}
+
 output "cloudfront_distribution_id" {
   value = aws_cloudfront_distribution.frontend.id
 }

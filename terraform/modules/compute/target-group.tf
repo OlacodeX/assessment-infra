@@ -11,7 +11,7 @@ resource "aws_lb_target_group" "backend" {
   health_check {
 
     enabled             = true
-    path                = "/ping"
+    path                = "/health"
     protocol            = "HTTP"
     port                = "traffic-port"
     matcher             = "200"

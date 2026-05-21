@@ -5,32 +5,57 @@ on:
     branches:
       - feature/full-stack
 
+env:
+  TF_WORKING_DIR: terraform
+  AWS_REGION: us-east-1
+
 jobs:
-
   terraform:
-
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
       - name: Terraform Init
         run: terraform init
-        working-directory: terraform
 
       - name: Terraform Validate
         run: terraform validate
-        working-directory: terraform
 
       - name: Terraform Plan
-        run: terraform plan
-        working-directory: terraform
+        env:
+          TF_VAR_mongodb_uri: ${{ secrets.TF_VAR_mongodb_uri }}
+          TF_VAR_jwt_secret: ${{ secrets.TF_VAR_jwt_secret }}
+        run: terraform plan -out=tfplan
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve
-        working-directory: terraform
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/feature/full-stack'
+        env:
+          TF_VAR_mongodb_uri: ${{ secrets.TF_VAR_mongodb_uri }}
+          TF_VAR_jwt_secret: ${{ secrets.TF_VAR_jwt_secret }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Post apply outputs
+        if: success()
+        run: |
+          echo "## Terraform outputs (sync to application repo secrets)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          terraform output >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

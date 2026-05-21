@@ -35,9 +35,31 @@ docker run -d \
   "$IMAGE"
 
 for i in $(seq 1 36); do
-  if curl -sf http://127.0.0.1:8080/ping >/dev/null; then
+  if curl -sf http://127.0.0.1:8080/health >/dev/null; then
     echo "API ready after $${i} attempt(s)"
     docker logs backend 2>&1 | tail -20
+
+    yum install -y amazon-cloudwatch-agent
+    cat <<EOF > /opt/aws/amazon-cloudwatch-agent/bin/config.json
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/user-data.log",
+            "log_group_name": "/${project_name}/backend",
+            "log_stream_name": "{instance_id}"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+    /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+      -a fetch-config -m ec2 \
+      -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json -s
     exit 0
   fi
   echo "Waiting for API (attempt $${i}/36)..."
@@ -46,6 +68,6 @@ for i in $(seq 1 36); do
   sleep 10
 done
 
-echo "ERROR: API did not respond on /ping — check MongoDB Atlas allowlist for NAT IP and docker logs"
+echo "ERROR: API did not respond on /health — check MongoDB Atlas allowlist for NAT IP and docker logs"
 docker logs backend 2>&1 | tail -50 || true
 exit 1
