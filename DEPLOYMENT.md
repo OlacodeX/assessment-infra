@@ -1,48 +1,102 @@
-# Deployment secrets and troubleshooting
+# Deployment checklist
 
-After `terraform apply`, sync these values into the **application repo** GitHub Actions secrets:
+Use this after `terraform apply` and on every infra recreate.
 
-| Secret | Terraform output | Example format |
-|--------|------------------|----------------|
-| `ALB_DNS_NAME` | `alb_dns_name` | `backend-alb-2015891018.us-east-1.elb.amazonaws.com` (hostname only, no `http://`) |
-| `ECR_REPOSITORY` | `ecr_repository_url` | `444166849648.dkr.ecr.us-east-1.amazonaws.com/assessment-backend` |
-| `ASG_NAME` | `autoscaling_group_name` | `terraform-20260521145317886600000009` |
+## 1. Terraform outputs → GitHub secrets (app repo)
 
-**Important:** After every `terraform destroy` + `apply`, the ALB DNS name changes. Update `ALB_DNS_NAME` or smoke tests will hit a dead hostname.
+| Secret | Output command |
+|--------|----------------|
+| `ALB_DNS_NAME` | `terraform -chdir=terraform output -raw alb_dns_name` |
+| `ECR_REPOSITORY` | `terraform -chdir=terraform output -raw ecr_repository_url` |
+| `ASG_NAME` | `terraform -chdir=terraform output -raw autoscaling_group_name` |
 
-## MongoDB Atlas
+Use the hostname only for `ALB_DNS_NAME` (no `http://`). Values change after destroy/apply.
 
-EC2 instances reach the internet via the NAT gateway. Allow that IP in Atlas:
+## 2. MongoDB Atlas (required — #1 cause of unhealthy targets)
+
+EC2 console logs show the **Docker container crash-looping**: the Go API calls `os.Exit(1)` if MongoDB connect/ping fails at startup, so nothing stays up on port **8080** and ALB `/ping` fails.
+
+**You must allowlist the NAT IP before instance refresh can succeed:**
+
 
 ```bash
 terraform -chdir=terraform output -raw nat_gateway_public_ip
 ```
 
-Atlas → Network Access → Add IP Address → paste the NAT public IP (or `0.0.0.0/0` for dev only).
+Atlas → **Network Access** → add that IP. Without this, the Go app exits on startup and targets stay **unhealthy** (502).
 
-## 502 Bad Gateway
+## 3. Deploy order
 
-The ALB returns 502 when **no healthy targets** are registered. Common causes:
+1. `terraform apply` (this repo)
+2. Backend CI/CD push to ECR + instance refresh (app repo)
+3. Frontend CI/CD upload to S3 + CloudFront invalidation (app repo)
 
-1. Wrong env vars in EC2 user-data (must match Go `config.go`: `JWT_SECRET_KEY`, `REDIS_ADDR`, `DB_NAME`, not `JWT_SECRET` / `REDIS_HOST`).
-2. App exits on startup if MongoDB is unreachable (Atlas IP not allowlisted).
-3. ECR image missing or instance refresh not run after push.
+## 4. Health checks (aligned)
 
-## Backend CI/CD smoke test
+| Check | Path | Expects |
+|-------|------|---------|
+| ALB target group | `/ping` | HTTP 200 |
+| Docker HEALTHCHECK (image) | `/health` | 200 (needs DB + cache OK) |
+| CI smoke test (recommended) | `/ping` or `/health` | see below |
 
-The workflow curls `/health`, which returns **503** if MongoDB or Redis checks fail, even when the server is up.
+- **`/ping`**: API process is listening.
+- **`/health`**: MongoDB (and Redis if `ENABLE_CACHE=true`) must be reachable; returns **503** otherwise.
 
-Either:
-
-- Allowlist the NAT IP in Atlas (recommended), or
-- Change the smoke test URL to `/ping` (always 200 when the API process is listening):
+For CI, either allowlist Atlas and keep `/health`, or use:
 
 ```yaml
 HEALTH_URL="http://${ALB_HOST}/ping"
 ```
 
-ALB target health checks use `/ping` in Terraform.
+## 5. After user-data or launch template changes
 
-## CloudFront AccessDenied
+```bash
+aws autoscaling start-instance-refresh \
+  --auto-scaling-group-name "$(terraform -chdir=terraform output -raw autoscaling_group_name)" \
+  --region us-east-1
+```
 
-Fixed by Origin Access Control (OAC) + S3 bucket policy in `terraform/modules/storage/cloudfront.tf`. Run `terraform apply`, then upload the frontend build to the S3 bucket from your frontend pipeline.
+## 6. Verify
+
+```bash
+curl -v "http://$(terraform -chdir=terraform output -raw alb_dns_name)/ping"
+curl -v "http://$(terraform -chdir=terraform output -raw alb_dns_name)/health"
+```
+
+Target group should show **healthy** before the ALB stops returning 502.
+
+## 7. CloudFront frontend
+
+OAC + bucket policy are in Terraform. You still need:
+
+- Frontend build uploaded to `s3_bucket_name` output (with `index.html` at bucket root)
+- `default_root_object` = `index.html` on the distribution
+
+## 8. EC2 env vars (user-data ↔ Go app)
+
+Must match `Server/MuchToDo/internal/config/config.go`:
+
+- `JWT_SECRET_KEY` (not `JWT_SECRET`)
+- `REDIS_ADDR=host:6379` (not `REDIS_HOST` / `REDIS_PORT`)
+- `DB_NAME` (default `much_todo_db`)
+- `MONGO_URI` quoted in `.env` (special characters in Atlas passwords)
+
+## Stuck instance refresh
+
+If refresh shows `100%` but `Waiting for remaining instances to be available`:
+
+1. Fix Atlas allowlist first.
+2. Cancel refresh: `aws autoscaling cancel-instance-refresh --auto-scaling-group-name <ASG> --region us-east-1`
+3. `terraform apply` then start a new refresh.
+
+## Troubleshooting unhealthy targets
+
+On an instance (SSM — IAM now includes `AmazonSSMManagedInstanceCore`):
+
+
+```bash
+sudo cat /var/log/user-data.log
+sudo docker ps -a
+sudo docker logs backend
+curl -v http://localhost:8080/ping
+```

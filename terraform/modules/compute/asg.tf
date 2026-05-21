@@ -20,7 +20,15 @@ resource "aws_autoscaling_group" "backend" {
   }
 
   health_check_type         = "ELB"
-  health_check_grace_period = 600
+  health_check_grace_period = 900
+
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 0
+      instance_warmup        = 300
+    }
+  }
 }
 
 resource "aws_autoscaling_policy" "scale_out" {

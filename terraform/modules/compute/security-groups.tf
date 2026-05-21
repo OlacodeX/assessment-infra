@@ -1,3 +1,7 @@
+data "aws_vpc" "main" {
+  id = var.vpc_id
+}
+
 resource "aws_security_group" "alb_sg" {
 
   name = "alb-sg"
@@ -33,6 +37,14 @@ resource "aws_security_group" "backend_sg" {
     protocol  = "tcp"
 
     security_groups = [aws_security_group.alb_sg.id]
+  }
+
+  # ALB health checks originate from load balancer nodes in the VPC
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.main.cidr_block]
   }
 
   ingress {

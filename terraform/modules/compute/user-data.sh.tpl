@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euxo pipefail
+set -uxo pipefail
 exec > >(tee /var/log/user-data.log) 2>&1
 
 yum update -y
@@ -9,24 +9,15 @@ systemctl enable docker
 systemctl start docker
 
 mkdir -p /home/ec2-user/app
-
-cat <<EOF > /home/ec2-user/app/.env
-PORT=8080
-MONGO_URI=${mongodb_uri}
-DB_NAME=${db_name}
-JWT_SECRET_KEY=${jwt_secret}
-ENABLE_CACHE=${enable_cache}
-REDIS_ADDR=${redis_endpoint}:${redis_port}
-LOG_LEVEL=INFO
-LOG_FORMAT=json
-ALLOWED_ORIGINS=*
-EOF
+echo '${backend_env_b64}' | base64 -d > /home/ec2-user/app/.env
+chmod 600 /home/ec2-user/app/.env
 
 aws ecr get-login-password --region ${aws_region} \
   | docker login --username AWS --password-stdin ${ecr_repository_url}
 
+IMAGE="${ecr_repository_url}:latest"
 for attempt in 1 2 3 4 5; do
-  if docker pull ${ecr_repository_url}:latest; then
+  if docker pull "$IMAGE"; then
     break
   fi
   echo "docker pull failed (attempt $attempt); retrying in 60s..."
@@ -41,33 +32,20 @@ docker run -d \
   -p 8080:8080 \
   --restart unless-stopped \
   --env-file /home/ec2-user/app/.env \
-  ${ecr_repository_url}:latest
+  "$IMAGE"
 
-sleep 15
-curl -sf http://localhost:8080/ping
+for i in $(seq 1 36); do
+  if curl -sf http://127.0.0.1:8080/ping >/dev/null; then
+    echo "API ready after $${i} attempt(s)"
+    docker logs backend 2>&1 | tail -20
+    exit 0
+  fi
+  echo "Waiting for API (attempt $${i}/36)..."
+  docker ps -a || true
+  docker logs backend 2>&1 | tail -15 || true
+  sleep 10
+done
 
-yum install -y amazon-cloudwatch-agent
-
-cat <<EOF > /opt/aws/amazon-cloudwatch-agent/bin/config.json
-{
-  "logs": {
-    "logs_collected": {
-      "files": {
-        "collect_list": [
-          {
-            "file_path": "/var/log/user-data.log",
-            "log_group_name": "/assessment/backend",
-            "log_stream_name": "{instance_id}"
-          }
-        ]
-      }
-    }
-  }
-}
-EOF
-
-/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-  -a fetch-config \
-  -m ec2 \
-  -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json \
-  -s
+echo "ERROR: API did not respond on /ping — check MongoDB Atlas allowlist for NAT IP and docker logs"
+docker logs backend 2>&1 | tail -50 || true
+exit 1
