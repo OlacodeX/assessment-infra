@@ -46,7 +46,7 @@ cat <<EOF > /opt/aws/amazon-cloudwatch-agent/bin/config.json
         "collect_list": [
           {
             "file_path": "/home/ec2-user/logs/app.log",
-            "log_group_name": "/starttech/backend",
+            "log_group_name": "/assessment/backend",
             "log_stream_name": "{instance_id}"
           }
         ]

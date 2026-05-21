@@ -1,6 +1,6 @@
 resource "aws_iam_role" "ec2_role" {
 
-  name = "starttech-ec2-role"
+  name = "assessment-ec2-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -33,7 +33,7 @@ resource "aws_iam_role_policy_attachment" "ecr" {
 
 resource "aws_iam_instance_profile" "profile" {
 
-  name = "starttech-profile"
+  name = "assessment-profile"
 
   role = aws_iam_role.ec2_role.name
 }
