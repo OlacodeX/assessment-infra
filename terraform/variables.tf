@@ -27,3 +27,13 @@ variable "redis_port" {
   type    = number
   default = 6379
 }
+
+variable "db_name" {
+  type    = string
+  default = "much_todo_db"
+}
+
+variable "enable_cache" {
+  type    = bool
+  default = true
+}

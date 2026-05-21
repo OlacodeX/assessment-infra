@@ -36,6 +36,10 @@ module "compute" {
   redis_endpoint = module.storage.redis_endpoint
 
   aws_region = var.aws_region
+
+  db_name = var.db_name
+
+  enable_cache = var.enable_cache
 }
 
 module "monitoring" {

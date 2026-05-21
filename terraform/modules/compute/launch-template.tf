@@ -21,6 +21,10 @@ resource "aws_launch_template" "backend" {
 
       jwt_secret = var.jwt_secret
 
+      db_name = var.db_name
+
+      enable_cache = var.enable_cache
+
       redis_port = var.redis_port
 
       redis_endpoint = var.redis_endpoint

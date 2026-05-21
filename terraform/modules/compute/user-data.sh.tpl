@@ -1,42 +1,52 @@
 #!/bin/bash
+set -euxo pipefail
+exec > >(tee /var/log/user-data.log) 2>&1
 
 yum update -y
-
-yum install docker -y
+yum install -y docker
 
 systemctl enable docker
 systemctl start docker
-
-usermod -aG docker ec2-user
 
 mkdir -p /home/ec2-user/app
 
 cat <<EOF > /home/ec2-user/app/.env
 PORT=8080
 MONGO_URI=${mongodb_uri}
-REDIS_HOST=${redis_endpoint}
-REDIS_PORT=${redis_port}
-JWT_SECRET=${jwt_secret}
+DB_NAME=${db_name}
+JWT_SECRET_KEY=${jwt_secret}
+ENABLE_CACHE=${enable_cache}
+REDIS_ADDR=${redis_endpoint}:${redis_port}
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+ALLOWED_ORIGINS=*
 EOF
 
 aws ecr get-login-password --region ${aws_region} \
-| docker login \
---username AWS \
---password-stdin ${ecr_repository_url}
+  | docker login --username AWS --password-stdin ${ecr_repository_url}
 
-docker pull ${ecr_repository_url}:latest
+for attempt in 1 2 3 4 5; do
+  if docker pull ${ecr_repository_url}:latest; then
+    break
+  fi
+  echo "docker pull failed (attempt $attempt); retrying in 60s..."
+  sleep 60
+done
 
-docker stop backend || true
-docker rm backend || true
+docker stop backend 2>/dev/null || true
+docker rm backend 2>/dev/null || true
 
 docker run -d \
---name backend \
--p 8080:8080 \
---restart unless-stopped \
---env-file /home/ec2-user/app/.env \
-${ecr_repository_url}:latest
+  --name backend \
+  -p 8080:8080 \
+  --restart unless-stopped \
+  --env-file /home/ec2-user/app/.env \
+  ${ecr_repository_url}:latest
 
-yum install amazon-cloudwatch-agent -y
+sleep 15
+curl -sf http://localhost:8080/ping
+
+yum install -y amazon-cloudwatch-agent
 
 cat <<EOF > /opt/aws/amazon-cloudwatch-agent/bin/config.json
 {
@@ -45,7 +55,7 @@ cat <<EOF > /opt/aws/amazon-cloudwatch-agent/bin/config.json
       "files": {
         "collect_list": [
           {
-            "file_path": "/home/ec2-user/logs/app.log",
+            "file_path": "/var/log/user-data.log",
             "log_group_name": "/assessment/backend",
             "log_stream_name": "{instance_id}"
           }
@@ -57,7 +67,7 @@ cat <<EOF > /opt/aws/amazon-cloudwatch-agent/bin/config.json
 EOF
 
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
--a fetch-config \
--m ec2 \
--c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json \
--s
+  -a fetch-config \
+  -m ec2 \
+  -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json \
+  -s

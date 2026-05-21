@@ -19,7 +19,8 @@ resource "aws_autoscaling_group" "backend" {
     version = "$Latest"
   }
 
-  health_check_type = "ELB"
+  health_check_type         = "ELB"
+  health_check_grace_period = 600
 }
 
 resource "aws_autoscaling_policy" "scale_out" {

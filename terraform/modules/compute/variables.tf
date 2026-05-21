@@ -33,3 +33,13 @@ variable "redis_endpoint" {
 variable "aws_region" {
   type = string
 }
+
+variable "db_name" {
+  type    = string
+  default = "much_todo_db"
+}
+
+variable "enable_cache" {
+  type    = bool
+  default = true
+}

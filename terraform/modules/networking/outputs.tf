@@ -19,3 +19,8 @@ output "private_subnet_ids" {
     aws_subnet.private_2.id
   ]
 }
+
+output "nat_gateway_public_ip" {
+  description = "Whitelist this IP in MongoDB Atlas Network Access."
+  value       = aws_eip.nat.public_ip
+}
