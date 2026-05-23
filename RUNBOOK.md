@@ -51,7 +51,11 @@ curl "http://$(terraform output -raw alb_dns_name)/health"
 sudo cat /var/log/user-data.log
 sudo docker ps -a
 sudo docker logs backend
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ping
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/health
 ```
+
+If logs show `error parsing uri: scheme must be "mongodb"` while `/home/ec2-user/app/.env` looks correct, rebuild and push the backend image after the app config fix (`viper.BindEnv` for `MONGO_URI`, etc.), then run an instance refresh.
 
 SSM is enabled on EC2 (`AmazonSSMManagedInstanceCore`).
 
