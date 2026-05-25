@@ -3,7 +3,7 @@ name: Infrastructure Deploy
 on:
   push:
     branches:
-      - feature/full-stack
+      - master
 
 env:
   TF_WORKING_DIR: terraform
