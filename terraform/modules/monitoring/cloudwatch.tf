@@ -7,10 +7,10 @@ resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project_name}-operations"
 
   dashboard_body = templatefile("${path.root}/../monitoring/cloudwatch-dashboard.json", {
-    aws_region        = var.aws_region
-    asg_name          = var.asg_name
-    alb_arn_suffix    = var.alb_arn_suffix
-    redis_cluster_id  = var.redis_cluster_id
+    aws_region       = var.aws_region
+    asg_name         = var.asg_name
+    alb_arn_suffix   = var.alb_arn_suffix
+    redis_cluster_id = var.redis_cluster_id
   })
 }
 
