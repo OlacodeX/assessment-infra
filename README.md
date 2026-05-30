@@ -47,9 +47,7 @@ starttech-infra/
 │   ├── cloudwatch-dashboard.json
 │   ├── alarm-definitions.json
 │   └── log-insights-queries.txt
-├── README.md
-├── ARCHITECTURE.md
-└── RUNBOOK.md
+└── README.md
 ```
 
 ---
